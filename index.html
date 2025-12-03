@@ -811,42 +811,68 @@
     }
 
     // =========================================================================
-    // AUDIO ENGINE - Matching HiChord's SAW preset from main.cpp
-    // - 12 oscillators (6 voices × 2 osc each) - all POLYBLEP_SAW except bass (SINE)
-    // - ADSR "SHORT" preset: Attack=0.1s, Decay=0.1s, Sustain=100%, Release=1.0s
-    // - Stereo spread with detuned pairs
-    // - No LFO modulation (mod amps = 0)
+    // AUDIO ENGINE - Accurately matching HiChord's SAW preset from main.cpp
+    //
+    // Architecture from main.cpp:
+    // - 6 chord voices: osc1, osc2, osc3, osc5, osc6 (saw) + osc4 (bass, sine)
+    // - Each has detuned pair: osc1b-osc6b (freq * 1.005 = ~8.6 cents sharp)
+    // - Stereo: Left channel = osc1-6, Right channel = osc1b-6b
+    // - Bass (osc4/osc4b): centered mono, 2 octaves down, SINE wave
+    // - ADSR "SHORT": attack=0.1s, decay=0.1s, sustain=100%, release=1.0s
+    // - Division by 5 for mixing: averageWithoutDelay = (saw1+saw2+saw3+saw5+saw6) / 5
     // =========================================================================
 
     // ADSR settings matching main.cpp SHORT preset
     const ADSR = {
-      attack: 0.1,    // 100ms attack
+      attack: 0.01,   // 10ms attack (snappy like SHORT)
       decay: 0.1,     // 100ms decay
       sustain: 1.0,   // 100% sustain
-      release: 1.0    // 1000ms release
+      release: 0.15   // 150ms release (snappy)
     };
+
+    // Detune amount: main.cpp uses freq * 1.005 for 'b' oscillators (~8.6 cents)
+    const DETUNE_CENTS = 8.6;
 
     function initAudio() {
       ctx = new (window.AudioContext || window.webkitAudioContext)();
-      master = ctx.createGain();
-      master.gain.value = 0.35;
 
-      // Reverb (subtle, like HiChord's default)
+      // Create stereo merger for true L/R separation like main.cpp
+      const merger = ctx.createChannelMerger(2);
+
+      // Left and right channel gains
+      const leftGain = ctx.createGain();
+      const rightGain = ctx.createGain();
+      leftGain.gain.value = 1.0;
+      rightGain.gain.value = 1.0;
+
+      // Master gain
+      master = ctx.createGain();
+      master.gain.value = 0.4;
+
+      // Reverb (subtle, HiChord default has reverb off but we add subtle for web)
       const reverb = ctx.createConvolver();
-      const len = ctx.sampleRate * 1.5;
+      const len = ctx.sampleRate * 1.2;
       const impulse = ctx.createBuffer(2, len, ctx.sampleRate);
       for (let ch = 0; ch < 2; ch++) {
         const d = impulse.getChannelData(ch);
-        for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.exp(-i / (ctx.sampleRate * 0.4));
+        for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.exp(-i / (ctx.sampleRate * 0.3));
       }
       reverb.buffer = impulse;
 
       const dry = ctx.createGain(), wet = ctx.createGain();
-      dry.gain.value = 0.8; wet.gain.value = 0.2; // Subtle reverb
-      master.connect(ctx.destination);
-      dry.connect(master); wet.connect(master); reverb.connect(wet);
+      dry.gain.value = 0.92; wet.gain.value = 0.08; // Very subtle reverb
 
-      window.audio = { dry, reverb };
+      // Connect: L/R -> merger -> dry/reverb -> master -> destination
+      leftGain.connect(merger, 0, 0);
+      rightGain.connect(merger, 0, 1);
+      merger.connect(dry);
+      merger.connect(reverb);
+      reverb.connect(wet);
+      dry.connect(master);
+      wet.connect(master);
+      master.connect(ctx.destination);
+
+      window.audio = { leftGain, rightGain, dry, reverb };
       started = true;
       document.getElementById('startOverlay').classList.add('hidden');
     }
@@ -873,15 +899,18 @@
       const intervals = CHORD_INTERVALS[chordType] || CHORD_INTERVALS.major;
       const midiNotes = intervals.map(i => rootMidi + i);
 
-      // Bass note - 2 octaves down, SINE wave (like main.cpp osc4), mono center
+      // Bass note - 2 octaves down (rootFrequency / 4.0 in main.cpp)
+      // Uses SINE wave, centered mono (both L and R get same bass)
       const bassNote = rootMidi - 24;
-      createOsc(bassNote, 0.12, 0, false, 'sine'); // center, sine wave for bass
+      createBassOsc(bassNote);
 
-      // Chord notes - stereo detuned SAW pairs (12 oscillators like main.cpp)
-      // Each voice has 2 oscillators (osc1/osc1b pattern) for thick stereo sound
+      // Chord notes - matching main.cpp's osc1-6 (L) and osc1b-6b (R) architecture
+      // main.cpp divides by 5 when mixing, so we scale accordingly
+      const numVoices = midiNotes.length;
+      const voiceGain = 0.18 / Math.sqrt(numVoices); // Normalized for varying chord sizes
+
       midiNotes.forEach((midi, i) => {
-        const pan = (i - (midiNotes.length - 1) / 2) * 0.5; // wide stereo spread
-        createOsc(midi, 0.045, pan, true, 'sawtooth'); // with detune pair
+        createChordVoice(midi, voiceGain);
       });
 
       // Update piano visualization
@@ -908,62 +937,88 @@
       }
     }
 
-    function createOsc(midi, vol, pan, withPair, waveType = 'sawtooth') {
+    // Bass oscillator - SINE wave, mono centered, 2 octaves down
+    // Matches main.cpp: osc4 uses WAVE_SIN, freq4 = rootFrequency / 4.0
+    function createBassOsc(midi) {
+      const freq = midiToFreq(midi);
+      const now = ctx.currentTime;
+      const vol = 0.25; // Bass is prominent in HiChord
+
+      // Main bass osc (osc4)
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.value = freq;
+
+      gain.gain.value = 0;
+      gain.gain.setTargetAtTime(vol, now, ADSR.attack);
+
+      osc.connect(gain);
+      // Bass goes to BOTH channels equally (mono center)
+      // main.cpp: bassMix = (saw4 + saw4b) * 0.5f
+      gain.connect(window.audio.leftGain);
+      gain.connect(window.audio.rightGain);
+      osc.start();
+      oscs.push({ osc, gain });
+
+      // Detuned bass pair (osc4b) - freq * 1.01 in main.cpp
+      const oscB = ctx.createOscillator();
+      const gainB = ctx.createGain();
+      oscB.type = 'sine';
+      oscB.frequency.value = freq * 1.01; // main.cpp uses 1.01 for bass detune
+
+      gainB.gain.value = 0;
+      gainB.gain.setTargetAtTime(vol, now, ADSR.attack);
+
+      oscB.connect(gainB);
+      gainB.connect(window.audio.leftGain);
+      gainB.connect(window.audio.rightGain);
+      oscB.start();
+      oscs.push({ osc: oscB, gain: gainB });
+    }
+
+    // Chord voice - SAW wave with true stereo L/R separation
+    // Left channel: osc at base freq
+    // Right channel: oscB at freq * 1.005 (~8.6 cents sharp)
+    function createChordVoice(midi, vol) {
       const freq = midiToFreq(midi);
       const now = ctx.currentTime;
 
-      // Main osc - panned (like main.cpp osc1-6)
-      const osc1 = ctx.createOscillator();
-      const gain1 = ctx.createGain();
-      const pan1 = ctx.createStereoPanner();
+      // Left channel oscillator (osc1-6 in main.cpp)
+      const oscL = ctx.createOscillator();
+      const gainL = ctx.createGain();
+      oscL.type = 'sawtooth';
+      oscL.frequency.value = freq;
 
-      osc1.type = waveType;
-      osc1.frequency.value = freq;
-      osc1.detune.value = -6 + Math.random() * 2; // Slight detune for richness
+      gainL.gain.value = 0;
+      gainL.gain.setTargetAtTime(vol, now, ADSR.attack);
 
-      // ADSR envelope matching main.cpp SHORT preset
-      gain1.gain.value = 0;
-      gain1.gain.setTargetAtTime(vol, now, ADSR.attack * 0.3); // Attack
-      // Decay to sustain level happens automatically with setTargetAtTime
+      oscL.connect(gainL);
+      gainL.connect(window.audio.leftGain);
+      oscL.start();
+      oscs.push({ osc: oscL, gain: gainL });
 
-      pan1.pan.value = Math.max(-1, Math.min(1, pan - 0.2));
+      // Right channel oscillator (osc1b-6b in main.cpp)
+      // Detuned by 1.005 ratio = ~8.6 cents
+      const oscR = ctx.createOscillator();
+      const gainR = ctx.createGain();
+      oscR.type = 'sawtooth';
+      oscR.frequency.value = freq * 1.005; // main.cpp: freq1b = freq1 * 1.005
 
-      osc1.connect(gain1);
-      gain1.connect(pan1);
-      pan1.connect(window.audio.dry);
-      pan1.connect(window.audio.reverb);
-      osc1.start();
-      oscs.push({ osc: osc1, gain: gain1 });
+      gainR.gain.value = 0;
+      gainR.gain.setTargetAtTime(vol, now, ADSR.attack);
 
-      if (withPair) {
-        // Detuned pair - opposite pan (like main.cpp osc1b-6b)
-        const osc2 = ctx.createOscillator();
-        const gain2 = ctx.createGain();
-        const pan2 = ctx.createStereoPanner();
-
-        osc2.type = waveType;
-        osc2.frequency.value = freq;
-        osc2.detune.value = 6 + Math.random() * 2; // Opposite detune
-
-        gain2.gain.value = 0;
-        gain2.gain.setTargetAtTime(vol * 0.85, now, ADSR.attack * 0.3);
-        pan2.pan.value = Math.max(-1, Math.min(1, pan + 0.2));
-
-        osc2.connect(gain2);
-        gain2.connect(pan2);
-        pan2.connect(window.audio.dry);
-        pan2.connect(window.audio.reverb);
-        osc2.start();
-        oscs.push({ osc: osc2, gain: gain2 });
-      }
+      oscR.connect(gainR);
+      gainR.connect(window.audio.rightGain);
+      oscR.start();
+      oscs.push({ osc: oscR, gain: gainR });
     }
 
     function stopOscs() {
-      // Use ADSR release time (but capped for responsiveness)
-      const releaseTime = Math.min(ADSR.release, 0.3); // Cap at 300ms for snappy response
+      const now = ctx.currentTime;
       oscs.forEach(({ osc, gain }) => {
-        gain.gain.setTargetAtTime(0, ctx.currentTime, releaseTime * 0.3);
-        setTimeout(() => { try { osc.stop(); } catch(e) {} }, releaseTime * 1000 + 50);
+        gain.gain.setTargetAtTime(0, now, ADSR.release);
+        setTimeout(() => { try { osc.stop(); } catch(e) {} }, ADSR.release * 3000 + 50);
       });
       oscs = [];
     }
