@@ -827,7 +827,7 @@
       attack: 0.01,   // 10ms attack (snappy like SHORT)
       decay: 0.1,     // 100ms decay
       sustain: 1.0,   // 100% sustain
-      release: 0.15   // 150ms release (snappy)
+      release: 0.4    // 400ms release (audible tail)
     };
 
     // Detune amount: main.cpp uses freq * 1.005 for 'b' oscillators (~8.6 cents)
@@ -1016,9 +1016,12 @@
 
     function stopOscs() {
       const now = ctx.currentTime;
+      // Smooth release envelope - setTargetAtTime uses time constant (reaches ~63% in that time)
+      // Multiply by 3 for full fade, add extra time before stopping oscillators
       oscs.forEach(({ osc, gain }) => {
+        gain.gain.cancelScheduledValues(now);
         gain.gain.setTargetAtTime(0, now, ADSR.release);
-        setTimeout(() => { try { osc.stop(); } catch(e) {} }, ADSR.release * 3000 + 50);
+        setTimeout(() => { try { osc.stop(); } catch(e) {} }, ADSR.release * 5000 + 100);
       });
       oscs = [];
     }
