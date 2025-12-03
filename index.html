@@ -107,13 +107,27 @@
 
     /* Big Callout */
     .big-callout {
-      text-align: center; padding: 32px; margin-bottom: 40px;
+      text-align: center; padding: 32px; margin-bottom: 24px;
       background: linear-gradient(135deg, var(--cyan-dim) 0%, var(--orange-dim) 100%);
       border: 1px solid var(--border); border-radius: var(--radius-xl);
     }
     .big-callout h2 { font-size: 28px; font-weight: 800; margin-bottom: 8px; }
     .big-callout .highlight { color: var(--cyan); }
     .big-callout p { color: var(--text-dim); font-size: 16px; }
+
+    /* Device Callout - Real features reminder */
+    .device-callout {
+      display: flex; gap: 16px; align-items: flex-start;
+      background: var(--surface); border: 2px dashed var(--orange);
+      border-radius: var(--radius-lg); padding: 20px 24px; margin-bottom: 40px;
+    }
+    .device-callout-icon { font-size: 32px; flex-shrink: 0; }
+    .device-callout-content h3 { font-size: 16px; font-weight: 700; color: var(--orange); margin-bottom: 6px; }
+    .device-callout-content p { font-size: 13px; color: var(--text-dim); line-height: 1.6; margin: 0; }
+    .device-callout-content strong { color: var(--text); }
+    @media (max-width: 600px) {
+      .device-callout { flex-direction: column; text-align: center; align-items: center; }
+    }
 
     /* Stats Row */
     .stats-row {
@@ -168,6 +182,7 @@
     .synth-header { text-align: center; margin-bottom: 24px; }
     .synth-header h2 { font-size: 24px; font-weight: 800; margin-bottom: 6px; }
     .synth-header p { color: var(--text-dim); font-size: 14px; }
+    .preset-badge { display: inline-block; margin-top: 10px; padding: 6px 14px; background: var(--orange-dim); border: 1px solid var(--orange); border-radius: 50px; font-size: 12px; font-weight: 600; color: var(--orange); }
 
     /* Controls Row */
     .controls-row { display: flex; justify-content: center; align-items: center; gap: 24px; margin-bottom: 24px; flex-wrap: wrap; }
@@ -416,6 +431,15 @@
       <p>Press ANY button, ANY combination. They ALWAYS sound good together.</p>
     </div>
 
+    <!-- Real Device Callout -->
+    <div class="device-callout">
+      <div class="device-callout-icon">🎹</div>
+      <div class="device-callout-content">
+        <h3>This is just a tiny preview!</h3>
+        <p>The real HiChord has <strong>25+ sound presets</strong> (FM synths, samples, pads), <strong>built-in effects</strong> (reverb, chorus, flanger, delay), a <strong>2-track looper</strong>, <strong>drum machine</strong>, <strong>arpeggiator</strong>, and so much more. This demo only shows the basic SAW synth sound!</p>
+      </div>
+    </div>
+
     <!-- Stats -->
     <div class="stats-row">
       <div class="stat-card"><div class="stat-number">7</div><div class="stat-label">Chord Buttons</div></div>
@@ -471,6 +495,7 @@
         <div class="synth-header">
           <h2>Try It Now!</h2>
           <p>Click buttons or use your keyboard. Hold a chord and click the joystick directions!</p>
+          <div class="preset-badge">Playing: SAW preset (1 of 25+)</div>
         </div>
 
         <!-- Controls -->
@@ -786,14 +811,27 @@
     }
 
     // =========================================================================
-    // AUDIO ENGINE - Double detuned oscillators with panning + bass
+    // AUDIO ENGINE - Matching HiChord's SAW preset from main.cpp
+    // - 12 oscillators (6 voices × 2 osc each) - all POLYBLEP_SAW except bass (SINE)
+    // - ADSR "SHORT" preset: Attack=0.1s, Decay=0.1s, Sustain=100%, Release=1.0s
+    // - Stereo spread with detuned pairs
+    // - No LFO modulation (mod amps = 0)
     // =========================================================================
+
+    // ADSR settings matching main.cpp SHORT preset
+    const ADSR = {
+      attack: 0.1,    // 100ms attack
+      decay: 0.1,     // 100ms decay
+      sustain: 1.0,   // 100% sustain
+      release: 1.0    // 1000ms release
+    };
+
     function initAudio() {
       ctx = new (window.AudioContext || window.webkitAudioContext)();
       master = ctx.createGain();
       master.gain.value = 0.35;
 
-      // Reverb
+      // Reverb (subtle, like HiChord's default)
       const reverb = ctx.createConvolver();
       const len = ctx.sampleRate * 1.5;
       const impulse = ctx.createBuffer(2, len, ctx.sampleRate);
@@ -804,7 +842,7 @@
       reverb.buffer = impulse;
 
       const dry = ctx.createGain(), wet = ctx.createGain();
-      dry.gain.value = 0.75; wet.gain.value = 0.25;
+      dry.gain.value = 0.8; wet.gain.value = 0.2; // Subtle reverb
       master.connect(ctx.destination);
       dry.connect(master); wet.connect(master); reverb.connect(wet);
 
@@ -835,14 +873,15 @@
       const intervals = CHORD_INTERVALS[chordType] || CHORD_INTERVALS.major;
       const midiNotes = intervals.map(i => rootMidi + i);
 
-      // Bass note - 2 octaves down, mono center
+      // Bass note - 2 octaves down, SINE wave (like main.cpp osc4), mono center
       const bassNote = rootMidi - 24;
-      createOsc(bassNote, 0.12, 0, false); // center, no detune pair
+      createOsc(bassNote, 0.12, 0, false, 'sine'); // center, sine wave for bass
 
-      // Chord notes - stereo detuned pairs
+      // Chord notes - stereo detuned SAW pairs (12 oscillators like main.cpp)
+      // Each voice has 2 oscillators (osc1/osc1b pattern) for thick stereo sound
       midiNotes.forEach((midi, i) => {
-        const pan = (i - (midiNotes.length - 1) / 2) * 0.4; // spread across stereo
-        createOsc(midi, 0.05, pan, true); // with detune pair
+        const pan = (i - (midiNotes.length - 1) / 2) * 0.5; // wide stereo spread
+        createOsc(midi, 0.045, pan, true, 'sawtooth'); // with detune pair
       });
 
       // Update piano visualization
@@ -869,21 +908,25 @@
       }
     }
 
-    function createOsc(midi, vol, pan, withPair) {
+    function createOsc(midi, vol, pan, withPair, waveType = 'sawtooth') {
       const freq = midiToFreq(midi);
+      const now = ctx.currentTime;
 
-      // Main osc - panned
+      // Main osc - panned (like main.cpp osc1-6)
       const osc1 = ctx.createOscillator();
       const gain1 = ctx.createGain();
       const pan1 = ctx.createStereoPanner();
 
-      osc1.type = 'sawtooth';
+      osc1.type = waveType;
       osc1.frequency.value = freq;
-      osc1.detune.value = -6 + Math.random() * 2;
+      osc1.detune.value = -6 + Math.random() * 2; // Slight detune for richness
 
+      // ADSR envelope matching main.cpp SHORT preset
       gain1.gain.value = 0;
-      gain1.gain.setTargetAtTime(vol, ctx.currentTime, 0.012);
-      pan1.pan.value = Math.max(-1, Math.min(1, pan - 0.15));
+      gain1.gain.setTargetAtTime(vol, now, ADSR.attack * 0.3); // Attack
+      // Decay to sustain level happens automatically with setTargetAtTime
+
+      pan1.pan.value = Math.max(-1, Math.min(1, pan - 0.2));
 
       osc1.connect(gain1);
       gain1.connect(pan1);
@@ -893,18 +936,18 @@
       oscs.push({ osc: osc1, gain: gain1 });
 
       if (withPair) {
-        // Detuned pair - opposite pan
+        // Detuned pair - opposite pan (like main.cpp osc1b-6b)
         const osc2 = ctx.createOscillator();
         const gain2 = ctx.createGain();
         const pan2 = ctx.createStereoPanner();
 
-        osc2.type = 'sawtooth';
+        osc2.type = waveType;
         osc2.frequency.value = freq;
-        osc2.detune.value = 6 + Math.random() * 2;
+        osc2.detune.value = 6 + Math.random() * 2; // Opposite detune
 
         gain2.gain.value = 0;
-        gain2.gain.setTargetAtTime(vol * 0.7, ctx.currentTime, 0.012);
-        pan2.pan.value = Math.max(-1, Math.min(1, pan + 0.15));
+        gain2.gain.setTargetAtTime(vol * 0.85, now, ADSR.attack * 0.3);
+        pan2.pan.value = Math.max(-1, Math.min(1, pan + 0.2));
 
         osc2.connect(gain2);
         gain2.connect(pan2);
@@ -916,9 +959,11 @@
     }
 
     function stopOscs() {
+      // Use ADSR release time (but capped for responsiveness)
+      const releaseTime = Math.min(ADSR.release, 0.3); // Cap at 300ms for snappy response
       oscs.forEach(({ osc, gain }) => {
-        gain.gain.setTargetAtTime(0, ctx.currentTime, 0.06);
-        setTimeout(() => { try { osc.stop(); } catch(e) {} }, 120);
+        gain.gain.setTargetAtTime(0, ctx.currentTime, releaseTime * 0.3);
+        setTimeout(() => { try { osc.stop(); } catch(e) {} }, releaseTime * 1000 + 50);
       });
       oscs = [];
     }
