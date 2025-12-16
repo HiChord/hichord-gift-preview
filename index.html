@@ -907,6 +907,11 @@
     function initAudio() {
       ctx = new (window.AudioContext || window.webkitAudioContext)();
 
+      // CRITICAL for mobile: Resume AudioContext after user gesture
+      if (ctx.state === 'suspended') {
+        ctx.resume();
+      }
+
       // Create stereo merger for true L/R separation like main.cpp
       const merger = ctx.createChannelMerger(2);
 
@@ -956,6 +961,8 @@
 
     function playChord(btn) {
       if (!started) return;
+      // Resume audio context if suspended (mobile browsers)
+      if (ctx && ctx.state === 'suspended') ctx.resume();
       stopOscs();
 
       const info = CHORDS[btn - 1];
