@@ -905,12 +905,32 @@
     const DETUNE_CENTS = 8.6;
 
     function initAudio() {
+      // Prevent double init
+      if (ctx) {
+        if (ctx.state === 'suspended') ctx.resume();
+        started = true;
+        document.getElementById('startOverlay').classList.add('hidden');
+        return;
+      }
+
       ctx = new (window.AudioContext || window.webkitAudioContext)();
 
-      // CRITICAL for mobile: Resume AudioContext after user gesture
-      if (ctx.state === 'suspended') {
-        ctx.resume();
-      }
+      // CRITICAL for iOS: Resume AND play silent sound to unlock audio
+      const unlock = () => {
+        if (ctx.state === 'suspended') {
+          ctx.resume().then(() => {
+            // Play silent oscillator to fully unlock on iOS
+            const silentOsc = ctx.createOscillator();
+            const silentGain = ctx.createGain();
+            silentGain.gain.value = 0.001;
+            silentOsc.connect(silentGain);
+            silentGain.connect(ctx.destination);
+            silentOsc.start();
+            silentOsc.stop(ctx.currentTime + 0.1);
+          });
+        }
+      };
+      unlock();
 
       // Create stereo merger for true L/R separation like main.cpp
       const merger = ctx.createChannelMerger(2);
@@ -1134,7 +1154,12 @@
     }
 
     function activateBtn(num) {
-      if (!started) initAudio();
+      // Always try to init/resume audio on button press (mobile fix)
+      if (!started) {
+        initAudio();
+      } else if (ctx && ctx.state === 'suspended') {
+        ctx.resume();
+      }
       activeBtn = num;
       document.querySelectorAll('.hichord-btn').forEach(b => b.classList.remove('active'));
       document.querySelector(`[data-button="${num}"]`)?.classList.add('active');
@@ -1259,12 +1284,20 @@
     document.getElementById('volumeSlider').addEventListener('input', e => {
       if (master) master.gain.value = e.target.value / 150;
     });
-    document.getElementById('startBtn').addEventListener('click', initAudio);
-    document.querySelector('.btn-primary').addEventListener('click', e => {
+    // Start button - both click and touch for mobile
+    const startBtn = document.getElementById('startBtn');
+    startBtn.addEventListener('click', initAudio);
+    startBtn.addEventListener('touchend', e => { e.preventDefault(); initAudio(); });
+
+    // Play Now button
+    const playNowBtn = document.querySelector('.btn-primary');
+    const handlePlayNow = e => {
       e.preventDefault();
       document.getElementById('synth').scrollIntoView({ behavior: 'smooth' });
       if (!started) setTimeout(initAudio, 400);
-    });
+    };
+    playNowBtn.addEventListener('click', handlePlayNow);
+    playNowBtn.addEventListener('touchend', handlePlayNow);
 
     updateKeyDisplay();
     buildPiano();
