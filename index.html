@@ -374,12 +374,15 @@
       .qr-url { color: #000; font-size: 14px; }
       .print-instructions {
         display: block !important; margin-top: 24px; padding: 16px;
-        border: 2px dashed #ccc; border-radius: 8px; text-align: left;
+        border: 2px dashed #ccc; border-radius: 8px; text-align: center;
       }
-      .print-instructions h4 { font-size: 14px; margin-bottom: 8px; color: #000; }
-      .print-instructions p { font-size: 12px; color: #333; margin: 4px 0; }
+      .print-instructions p { font-size: 14px; color: #333; margin: 6px 0; }
+      .screen-only { display: none !important; }
+      .print-only { display: block !important; }
     }
     .print-instructions { display: none; }
+    .print-only { display: none; }
+    .screen-only { display: block; }
 
     /* Footer */
     .footer { text-align: center; padding: 40px 20px; border-top: 1px solid var(--border); margin-top: 40px; }
@@ -715,8 +718,14 @@
     <!-- QR Code Print Section -->
     <section class="qr-section">
       <div class="qr-card">
-        <h3 class="qr-title">Print This QR Code</h3>
-        <p class="qr-subtitle">Your HiChord won't arrive in time for Christmas? Print this QR code and put it in a card or under the tree!</p>
+        <!-- Shown on screen (for the gift giver) -->
+        <h3 class="qr-title screen-only">Print This QR Code</h3>
+        <p class="qr-subtitle screen-only">Your HiChord won't arrive in time for Christmas? Print this QR code and put it in a card or under the tree!</p>
+
+        <!-- Shown when printed (for the gift recipient) -->
+        <h3 class="qr-title print-only">You're Getting a HiChord!</h3>
+        <p class="qr-subtitle print-only">Scan this QR code to try it right now while you wait for the real thing to arrive!</p>
+
         <div class="qr-image-container">
           <img src="qr-code.png" alt="QR Code to HiChord Gift Preview" class="qr-image">
         </div>
@@ -727,10 +736,9 @@
         </div>
         <p class="qr-hint">Scan to try HiChord right now on any phone or computer!</p>
         <div class="print-instructions">
-          <h4>Instructions for the recipient:</h4>
           <p>1. Scan this QR code with your phone camera</p>
-          <p>2. Open the link to try HiChord instantly</p>
-          <p>3. Your real HiChord is on its way!</p>
+          <p>2. Play chords instantly - no wrong notes!</p>
+          <p>3. Your real HiChord is shipping soon</p>
         </div>
       </div>
     </section>
