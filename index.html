@@ -341,6 +341,46 @@
     .resource-desc { font-size: 13px; color: var(--text-dim); line-height: 1.5; margin-bottom: 12px; }
     .resource-link { font-size: 12px; color: var(--cyan); font-weight: 600; }
 
+    /* QR Code Section */
+    .qr-section { padding: 40px 0; }
+    .qr-card {
+      background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-xl);
+      padding: 32px; text-align: center;
+    }
+    .qr-title { font-size: 22px; font-weight: 800; margin-bottom: 8px; }
+    .qr-subtitle { color: var(--text-dim); font-size: 14px; margin-bottom: 24px; max-width: 400px; margin-left: auto; margin-right: auto; }
+    .qr-image-container {
+      background: #fff; border-radius: var(--radius-lg); padding: 20px;
+      display: inline-block; margin-bottom: 20px;
+    }
+    .qr-image { width: 200px; height: 200px; display: block; }
+    .qr-url { font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--cyan); margin-bottom: 20px; }
+    .qr-buttons { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
+    .qr-hint { font-size: 12px; color: var(--text-muted); margin-top: 16px; }
+
+    /* Print Styles */
+    @media print {
+      body { background: #fff !important; }
+      .bg-glow, .start-overlay, .hero, .big-callout, .device-callout, .stats-row,
+      .features-section, .synth-section, .explainer-section, .resources-section,
+      .footer, .qr-buttons, .qr-hint { display: none !important; }
+      .container { padding: 0; max-width: 100%; }
+      .qr-section { padding: 20px; }
+      .qr-card { border: none; background: #fff; padding: 20px; }
+      .qr-title { color: #000; font-size: 28px; margin-bottom: 12px; }
+      .qr-subtitle { color: #333; font-size: 16px; margin-bottom: 24px; }
+      .qr-image-container { padding: 0; background: #fff; }
+      .qr-image { width: 300px; height: 300px; }
+      .qr-url { color: #000; font-size: 14px; }
+      .print-instructions {
+        display: block !important; margin-top: 24px; padding: 16px;
+        border: 2px dashed #ccc; border-radius: 8px; text-align: left;
+      }
+      .print-instructions h4 { font-size: 14px; margin-bottom: 8px; color: #000; }
+      .print-instructions p { font-size: 12px; color: #333; margin: 4px 0; }
+    }
+    .print-instructions { display: none; }
+
     /* Footer */
     .footer { text-align: center; padding: 40px 20px; border-top: 1px solid var(--border); margin-top: 40px; }
     .footer-logo { font-size: 22px; font-weight: 800; margin-bottom: 12px; background: linear-gradient(135deg, var(--cyan) 0%, var(--orange) 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
@@ -669,6 +709,29 @@
           <p class="resource-desc">Learn more about HiChord and see all the details</p>
           <span class="resource-link">hichord.shop</span>
         </a>
+      </div>
+    </section>
+
+    <!-- QR Code Print Section -->
+    <section class="qr-section">
+      <div class="qr-card">
+        <h3 class="qr-title">Print This QR Code</h3>
+        <p class="qr-subtitle">Your HiChord won't arrive in time for Christmas? Print this QR code and put it in a card or under the tree!</p>
+        <div class="qr-image-container">
+          <img src="qr-code.png" alt="QR Code to HiChord Gift Preview" class="qr-image">
+        </div>
+        <div class="qr-url">hichord.github.io/hichord-gift-preview</div>
+        <div class="qr-buttons">
+          <button class="btn btn-primary" onclick="window.print()">Print QR Code</button>
+          <a href="qr-code.png" download="hichord-gift-qr.png" class="btn btn-secondary">Download Image</a>
+        </div>
+        <p class="qr-hint">Scan to try HiChord right now on any phone or computer!</p>
+        <div class="print-instructions">
+          <h4>Instructions for the recipient:</h4>
+          <p>1. Scan this QR code with your phone camera</p>
+          <p>2. Open the link to try HiChord instantly</p>
+          <p>3. Your real HiChord is on its way!</p>
+        </div>
       </div>
     </section>
 
